@@ -2,7 +2,7 @@ import cv2 #type: ignore
 import time
 import sys
 from tensorflow.keras.models import load_model #type: ignore
-from ImageProcessing import fix_camera_orientation, find_sign_region, preprocess_for_model, decide_action
+from Model.image_processing import fix_camera_orientation, find_sign_region, preprocess_for_model, decide_action
 
 # ==========================================
 # 0. PLATFORM DETECTION (PC vs PI)
