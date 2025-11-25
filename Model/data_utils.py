@@ -1,147 +1,209 @@
 import os
-import cv2 # type: ignore
+from typing import final
 import numpy as np
+import cv2                                          #type: ignore
 import random
 
-from image_processing import apply_custom_filter
-
-def apply_occlusion(img):
-    """Covers random image region with noise for augmentation."""
-    h, w = img.shape
-    occ_img = img.copy()
-    type_idx = random.randint(0, 5)
-    if type_idx == 0: return occ_img
-
-    block_h = h // 3
-    block_w = w // 3
-    noise = np.random.randint(0, 255, (h, w), dtype='uint8')
-    if type_idx == 1:  # Right
-        occ_img[:, w-block_w:] = noise[:, w-block_w:]
-    elif type_idx == 2:  # Left
-        occ_img[:, :block_w] = noise[:, :block_w]
-    elif type_idx == 3:  # Top
-        occ_img[:block_h, :] = noise[:block_h, :]
-    elif type_idx == 4:  # Bottom
-        occ_img[h-block_h:, :] = noise[h-block_h:, :]
-    elif type_idx == 5:  # Random Corner
-        cx = random.choice([0, w-block_w])
-        cy = random.choice([0, h-block_h])
-        occ_img[cy:cy+block_h, cx:cx+block_w] = noise[cy:cy+block_h, cx:cx+block_w]
-    return occ_img
-
-def load_plain_circles(directory, img_size):
-    """
-    Loads base circle templates. 
-    Tries to load in COLOR to preserve the blue if possible, 
-    otherwise converts to BGR.
-    """
-    print(f"Loading base circles from {directory}...")
-    circles = []
-    if os.path.exists(directory):
-        for f in os.listdir(directory):
-            if f.lower().endswith(('.png', '.jpg', '.jpeg')):
-                path = os.path.join(directory, f)
-                # Load in Color (BGR) so we can have Blue background
-                img = cv2.imread(path, cv2.IMREAD_COLOR) 
-                if img is not None:
-                    img = cv2.resize(img, img_size)
-                    circles.append(img)
-    return circles
-
-def draw_thick_arrow(img, pt1, pt2, color=(255, 255, 255), thickness=4, tip_size=10):
-    """
-    Draws a 'perfect' traffic sign arrow with a distinct head.
+def draw_thick_arrow(img, pt1, pt2, color=(255, 255, 255), thickness=8, tip_size=20, sign_type='U_turn'):
+    """ 
+    Draws a very thick arrow with a wide, bold tip to match the reference. 
     """
     # Draw the shaft
     cv2.line(img, pt1, pt2, color, thickness, lineType=cv2.LINE_AA)
     
-    # Calculate angle for the arrowhead
+    # Calculate angle of the line
     angle = np.arctan2(pt1[1] - pt2[1], pt1[0] - pt2[0])
+    arrow_angle = np.pi / 3.5  
     
-    # Arrowhead points
-    p1 = (int(pt2[0] + tip_size * np.cos(angle + np.pi / 6)),
-          int(pt2[1] + tip_size * np.sin(angle + np.pi / 6)))
-    p2 = (int(pt2[0] + tip_size * np.cos(angle - np.pi / 6)),
-          int(pt2[1] + tip_size * np.sin(angle - np.pi / 6)))
-    
-    # Draw filled triangle for head
-    triangle_cnt = np.array([pt2, p1, p2])
-    cv2.fillPoly(img, [triangle_cnt], color)
+    p1 = (int(pt2[0] + tip_size * np.cos(angle + arrow_angle)),
+          int(pt2[1] + tip_size * np.sin(angle + arrow_angle)))
+    p2 = (int(pt2[0] + tip_size * np.cos(angle - arrow_angle)),
+          int(pt2[1] + tip_size * np.sin(angle - arrow_angle)))
+    if sign_type == 'right':
+        triangle_cnt = np.array([(pt2[0]+5, pt2[1]), p1, p2])
+    elif sign_type == 'left':
+        triangle_cnt = np.array([(pt2[0]-5, pt2[1]), p1, p2])
+    else:
+        triangle_cnt = np.array([(pt2[0], pt2[1]+5), p1, p2])
+    cv2.fillPoly(img, [triangle_cnt], color, lineType=cv2.LINE_AA)
 
-def create_synthetic_data(base_circles, save_dir='dataset/synthetic_created', num_samples=1000, img_size=(64,64)):
-    """
-    Generates 'Perfect' synthetic signs (Blue & White) and saves them.
-    Returns Grayscale arrays for training.
-    """
-    print(f"Generating {num_samples} Perfect Signs...")
+def create_base_sign(label, img_size=(64, 64)):
+    img = np.zeros((img_size[0], img_size[1], 3), dtype=np.uint8)
     
-    # 1. Setup Save Directories
-    classes = ['0_left', '1_right', '2_turn_around']
+    center = (img_size[0]//2, img_size[1]//2)
+    radius = (img_size[0]//2) - 3
     
-    for cls in classes:
-        os.makedirs(os.path.join(save_dir, cls), exist_ok=True)
+    cv2.circle(img, center, radius, (255, 0, 0), -1, lineType=cv2.LINE_AA)
+    cv2.circle(img, center, radius, (255, 255, 255), 2, lineType=cv2.LINE_AA)
+    
+    white = (255, 255, 255)
+
+    thick = 5          
+    arrow_tip = 12     
+    
+    if label == 0: # Turn Left
+        draw_thick_arrow(img, (48, 32), (16, 32), white, thickness=thick, tip_size=arrow_tip, sign_type='left')
         
+    elif label == 1: # Turn Right
+        draw_thick_arrow(img, (16, 32), (48, 32), white, thickness=thick, tip_size=arrow_tip, sign_type='right')
+        
+    elif label == 2: # U-Turn
+        # 1. Right straight line (going up)
+        cv2.line(img, (44, 40), (44, 28), white, thick, lineType=cv2.LINE_AA)
+        
+        # 2. Top semi-circle arc
+        cv2.ellipse(img, (32, 28), (12, 12), 0, 180, 360, white, thick, lineType=cv2.LINE_AA)
+        
+        # 3. Left arrow (going down)
+        draw_thick_arrow(img, (20, 28), (20, 40), white, thickness=thick, tip_size=arrow_tip)
+        
+    return img
+
+def apply_occlusion(img):
+    """ Covers 1/4 of the image with noise. """
+    h, w = img.shape[:2]
+    occ_img = img.copy()
+    
+    type_idx = random.randint(0, 4)
+    noise = np.random.randint(0, 255, (h, w, 3), dtype='uint8')
+    
+    if type_idx == 0: # Right
+        occ_img[:, 3*w//4:] = noise[:, 3*w//4:]
+    elif type_idx == 1: # Left
+        occ_img[:, :w//4] = noise[:, :w//4]
+    elif type_idx == 2: # Top
+        occ_img[:h//4, :] = noise[:h//4, :]
+    elif type_idx == 3: # Bottom
+        occ_img[3*h//4:, :] = noise[3*h//4:, :]
+    elif type_idx == 4: # Center
+        y1, y2 = h//4, 3*h//4
+        x1, x2 = w//4, 3*w//4
+        occ_img[y1:y2, x1:x2] = noise[y1:y2, x1:x2]
+        
+    return occ_img
+
+def apply_rotation(img):
+    """ Rotates image around its center by the given angle. """
+    angle = random.uniform(-15, 15)
+    h, w = img.shape[:2]
+    center = (w // 2, h // 2)
+    M = cv2.getRotationMatrix2D(center, angle, 1.0)
+    rotated = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    return rotated
+
+def create_synthetic_data(img_size=(64,64)):
+    print("Generating Synthetic Data (Bold Arrows)...")
     X = []
     y = []
+    classes = [0, 1, 2] 
     
-    if not base_circles:
-        print("Error: No base circles provided!")
-        return np.array(X), np.array(y)
+    X.append(create_base_sign(0, img_size))
+    y.append(0)
+    X.append(create_base_sign(1, img_size))
+    y.append(1)
+    X.append(create_base_sign(2, img_size))
+    y.append(2)
 
-    for i in range(num_samples):
-        # Pick a base circle
-        base = random.choice(base_circles).copy()
-        
-        # Ensure base is BGR (Blue-Green-Red)
-        if len(base.shape) == 2:
-            base = cv2.cvtColor(base, cv2.COLOR_GRAY2BGR)
-            
-        mask = cv2.cvtColor(base, cv2.COLOR_BGR2GRAY)
-        _, mask = cv2.threshold(mask, 50, 255, cv2.THRESH_BINARY)
-        base[mask > 0] = (255, 0, 0) # OpenCV Blue
-        
-        label = random.randint(0, 2)
-        save_folder = classes[label]
-        
-        # --- DRAWING PERFECT SIGNS ---
-        WHITE_COLOR = (255, 255, 255)
-        THICK = 6 
-        
-        if label == 0: # LEFT
-            # Arrow pointing Left
-            start = (48, 32)
-            end = (16, 32)
-            draw_thick_arrow(base, start, end, WHITE_COLOR, thickness=THICK, tip_size=14)
-            
-        elif label == 1: # RIGHT
-            # Arrow pointing Right
-            start = (16, 32)
-            end = (48, 32)
-            draw_thick_arrow(base, start, end, WHITE_COLOR, thickness=THICK, tip_size=14)
-            
-        elif label == 2: # TURN AROUND (U-Turn)
-            # Inverted U shape
-            # Left Leg (Down with Arrow)
-            draw_thick_arrow(base, (24, 30), (24, 50), WHITE_COLOR, thickness=THICK, tip_size=12)
-            # Right Leg (Straight Up)
-            cv2.line(base, (40, 50), (40, 30), WHITE_COLOR, THICK, lineType=cv2.LINE_AA)
-            # Top Arc
-            # Center(32, 30), Axes(8, 8), Angle 0, Start 180, End 360
-            cv2.ellipse(base, (32, 30), (8, 8), 0, 180, 360, WHITE_COLOR, THICK, lineType=cv2.LINE_AA)
+    blur_levels = [(0,0), (3,3), (5,5), (7,7), (9,9)] 
+    REPETITIONS = 20 
 
-        # --- SAVE TO DISK (COLOR) ---
-        filename = f"{save_dir}/{save_folder}/synth_{i}.png"
-        cv2.imwrite(filename, base)
+    for _ in range(REPETITIONS):
+        for label in classes:
+            base = create_base_sign(label, img_size)
+            
+            for ksize in blur_levels:
+                if ksize == (0, 0):
+                    blurred = base.copy()
+                else:
+                    blurred = cv2.GaussianBlur(base, ksize, 0)
+                
+                rotated = apply_rotation(blurred) if label in [0,1] else blurred.copy()
+                X.append(rotated)
+                y.append(label)
 
-        # --- PREPARE FOR MODEL (GRAYSCALE) ---
-        # The model expects Grayscale inputs
-        gray_version = cv2.cvtColor(base, cv2.COLOR_BGR2GRAY)
-        
-        # Apply the Matrix Filter (The "Useful Part")
-        filtered = apply_custom_filter(gray_version)
-        
-        X.append(filtered)
-        y.append(label)
-        
-    print(f"Saved generated images to '{save_dir}/'")
+                mix = apply_occlusion(rotated)
+                X.append(mix)
+                y.append(label) 
+
+                noise = apply_occlusion(blurred)
+                X.append(noise)
+                y.append(label)
+
+
+                
     return np.array(X), np.array(y)
+
+def visualize_data(X, y, samples=20):
+    print(f"Total images generated: {len(X)}")
+    print("Displaying preview...")
+    images_to_show = []
+    indices = np.linspace(0, len(X)-1, samples, dtype=int)
+    
+    for i in indices:
+        img = X[i].copy() 
+        label = y[i]
+        cv2.rectangle(img, (0,0), (40, 20), (0,0,0), -1)
+        cv2.putText(img, f"L:{label}", (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+        images_to_show.append(img)
+    
+    rows = []
+    cols_per_row = 5
+    row_imgs = []
+    for i, img in enumerate(images_to_show):
+        row_imgs.append(img)
+        if len(row_imgs) == cols_per_row:
+            rows.append(cv2.hconcat(row_imgs))
+            row_imgs = []
+    if row_imgs:
+        while len(row_imgs) < cols_per_row: row_imgs.append(np.zeros_like(images_to_show[0]))
+        rows.append(cv2.hconcat(row_imgs))
+
+    if rows:
+        final_grid = cv2.vconcat(rows)
+        final_grid = cv2.resize(final_grid, (0,0), fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
+        cv2.imshow("Bold Arrow Reference Match", final_grid)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+def save_data(X, y, base_dir="./trainingData/synthetic/"):
+    """
+    Saves images into subfolders:
+    trainingData/synthetic/0_left
+    trainingData/synthetic/1_right
+    trainingData/synthetic/2_turn_around
+    """
+    
+    # Map IDs to Folder Names
+    class_map = {
+        0: "0_left",
+        1: "1_right",
+        2: "2_turn_around"
+    }
+
+    # Create directories if they don't exist
+    if not os.path.exists(base_dir):
+        os.makedirs(base_dir)
+        
+    for key in class_map:
+        path = os.path.join(base_dir, class_map[key])
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+    print(f"Saving {len(X)} images to '{base_dir}'...")
+    
+    count = 0
+    for img, label in zip(X, y):
+        folder_name = class_map[label]
+        # Create a unique filename
+        filename = f"syn_{count}.png"
+        save_path = os.path.join(base_dir, folder_name, filename)
+        
+        cv2.imwrite(save_path, img)
+        count += 1
+        
+    print("Save complete.")
+
+if __name__ == "__main__":
+    X_syn, y_syn = create_synthetic_data()
+    visualize_data(X_syn, y_syn, samples=20)
+    save_data(X_syn, y_syn)
