@@ -20,11 +20,11 @@ def draw_thick_arrow(img, pt1, pt2, color=(255, 255, 255), thickness=8, tip_size
     p2 = (int(pt2[0] + tip_size * np.cos(angle - arrow_angle)),
           int(pt2[1] + tip_size * np.sin(angle - arrow_angle)))
     if sign_type == 'right':
-        triangle_cnt = np.array([(pt2[0]+5, pt2[1]), p1, p2])
+        triangle_cnt = np.array([(pt2[0]+7, pt2[1]), p1, p2])
     elif sign_type == 'left':
-        triangle_cnt = np.array([(pt2[0]-5, pt2[1]), p1, p2])
+        triangle_cnt = np.array([(pt2[0]-7, pt2[1]), p1, p2])
     else:
-        triangle_cnt = np.array([(pt2[0], pt2[1]+5), p1, p2])
+        triangle_cnt = np.array([(pt2[0], pt2[1]+7), p1, p2])
     cv2.fillPoly(img, [triangle_cnt], color, lineType=cv2.LINE_AA)
 
 def create_base_sign(label, img_size=(64, 64)):
@@ -38,8 +38,8 @@ def create_base_sign(label, img_size=(64, 64)):
     
     white = (255, 255, 255)
 
-    thick = 5          
-    arrow_tip = 12     
+    thick = 8          
+    arrow_tip = 15     
     
     if label == 0: # Turn Left
         draw_thick_arrow(img, (48, 32), (16, 32), white, thickness=thick, tip_size=arrow_tip, sign_type='left')
