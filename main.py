@@ -72,7 +72,7 @@ try:
             ret, frame = cap.read()                                 #type: ignore
             if not ret: break
 
-        #frame = fix_camera_orientation(frame)                      # for the tank camera
+        frame = fix_camera_orientation(frame)                      # for the tank camera
         crop = find_sign_region(frame)
         
         action = "SEARCHING"
