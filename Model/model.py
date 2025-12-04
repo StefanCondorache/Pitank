@@ -52,7 +52,7 @@ def load_dataset(root_folder, target_size=(64, 64)):
     y = []
     
     # Map folder names to class IDs
-    class_map = { '0_left': 0, '1_right': 1, '2_turn_around': 2 }
+    class_map = { '0_left': 0, '1_right': 1, '2_turn_around': 2}
     
     print(f"Loading data from: {root_folder}")
     

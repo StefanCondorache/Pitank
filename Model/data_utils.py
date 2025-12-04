@@ -39,7 +39,7 @@ def create_base_sign(label, img_size=(64, 64)):
     white = (255, 255, 255)
 
     thick = 8          
-    arrow_tip = 15     
+    arrow_tip = 18     
     
     if label == 0: # Turn Left
         draw_thick_arrow(img, (48, 32), (16, 32), white, thickness=thick, tip_size=arrow_tip, sign_type='left')
@@ -55,7 +55,7 @@ def create_base_sign(label, img_size=(64, 64)):
         cv2.ellipse(img, (32, 28), (12, 12), 0, 180, 360, white, thick, lineType=cv2.LINE_AA)
         
         # 3. Left arrow (going down)
-        draw_thick_arrow(img, (20, 28), (20, 40), white, thickness=thick, tip_size=arrow_tip)
+        draw_thick_arrow(img, (20, 28), (20, 40), white, thickness=thick, tip_size=15)
         
     return img
 
@@ -84,7 +84,7 @@ def apply_occlusion(img):
 
 def apply_rotation(img):
     """ Rotates image around its center by the given angle. """
-    angle = random.uniform(-15, 15)
+    angle = random.uniform(-20, 20)
     h, w = img.shape[:2]
     center = (w // 2, h // 2)
     M = cv2.getRotationMatrix2D(center, angle, 1.0)
